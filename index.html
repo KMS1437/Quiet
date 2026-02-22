@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pulse: Neural Network Social</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Force Graph Library для визуализации -->
+    <script src="//unpkg.com/force-graph"></script>
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        'pulse-dark': '#0f172a', // Slate-900
+                        'pulse-panel': '#1e293b', // Slate-800
+                        'pulse-accent': '#6366f1', // Indigo-500
+                        'pulse-glow': '#818cf8', // Indigo-400
+                        'neon-pink': '#ec4899',
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #0f172a;
+            color: #e2e8f0;
+        }
+        /* Стеклянный эффект */
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .input {
+            width: 100%;
+            padding: 12px 16px;
+            border-radius: 0.75rem;
+            background-color: #334155;
+            border: 1px solid #475569;
+            color: white;
+            transition: all 0.3s ease;
+        }
+        .input:focus {
+            border-color: #6366f1;
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.3);
+        }
+        /* Анимация градиента текста */
+        .text-gradient {
+            background: linear-gradient(to right, #818cf8, #ec4899);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        /* Стили для канваса графа */
+        #graph-container canvas {
+            border-radius: 1rem;
+        }
+    </style>
+
+    <!-- Vue 3 -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+</head>
+
+<body class="min-h-screen font-sans selection:bg-pulse-accent selection:text-white">
+    <div id="app" class="max-w-5xl mx-auto flex flex-col min-h-screen">
+
+        <!-- Header -->
+        <header class="sticky top-4 z-50 mx-4 mt-4 rounded-2xl glass-panel p-4 shadow-2xl shadow-black/50 flex justify-between items-center">
+            <div class="flex items-center gap-3 cursor-pointer" @click="switchView('feed')">
+                <div class="w-8 h-8 rounded-full bg-gradient-to-br from-pulse-accent to-neon-pink animate-pulse"></div>
+                <h1 class="text-2xl font-black tracking-tighter text-gradient">
+                    PULSE
+                </h1>
+            </div>
+
+            <div class="flex items-center space-x-4">
+                <template v-if="authToken">
+                     <!-- Переключатель режимов -->
+                    <div class="flex bg-slate-900 rounded-full p-1 border border-slate-700">
+                        <button @click="switchView('feed')" :class="currentView === 'feed' ? 'bg-pulse-accent text-white' : 'text-slate-400 hover:text-white'" class="px-4 py-1 rounded-full text-sm font-medium transition-all">Лента</button>
+                        <button @click="switchView('graph')" :class="currentView === 'graph' ? 'bg-neon-pink text-white' : 'text-slate-400 hover:text-white'" class="px-4 py-1 rounded-full text-sm font-medium transition-all flex items-center gap-1">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                            Граф
+                        </button>
+                    </div>
+
+                    <div class="hidden sm:flex flex-col items-end leading-tight">
+                        <span class="text-xs text-slate-400">ID Профиля</span>
+                        <code class="font-mono text-xs text-pulse-glow">{{ userId.substring(0, 6) }}</code>
+                    </div>
+                    <button @click="logout" class="bg-slate-800 hover:bg-red-500/20 hover:text-red-400 text-slate-300 p-2 rounded-full transition border border-slate-700">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
+                    </button>
+                </template>
+            </div>
+        </header>
+
+        <main class="flex-grow p-4 sm:p-6">
+
+            <!-- Loader -->
+            <div v-if="!isReady || loading" class="flex justify-center items-center h-64">
+                <div class="w-12 h-12 border-4 border-pulse-accent border-t-transparent rounded-full animate-spin"></div>
+            </div>
+
+            <!-- AUTH VIEW -->
+            <div v-else-if="!authToken" class="flex justify-center items-center min-h-[60vh]">
+                <div class="glass-panel p-8 rounded-3xl shadow-2xl w-full max-w-md border-t border-white/10">
+                    <h2 class="text-3xl font-bold mb-2 text-center text-white">Добро пожаловать</h2>
+                    <p class="text-center text-slate-400 mb-8">Синхронизируйте свои мысли в Pulse</p>
+
+                    <form @submit.prevent="isRegistering ? register() : login()" class="space-y-5">
+                        <div>
+                            <label class="text-xs uppercase font-bold text-slate-500 tracking-wider ml-1">Email</label>
+                            <input v-model="auth.email" type="email" class="input mt-1" placeholder="name@example.com" required>
+                        </div>
+                        <div>
+                            <label class="text-xs uppercase font-bold text-slate-500 tracking-wider ml-1">Пароль</label>
+                            <input v-model="auth.password" type="password" class="input mt-1" placeholder="••••••••" required>
+                        </div>
+
+                        <div v-if="auth.error" class="text-red-400 text-sm bg-red-900/20 p-3 rounded-lg border border-red-900/50">{{ auth.error }}</div>
+
+                        <button type="submit" :disabled="auth.loading" class="w-full bg-pulse-accent hover:bg-indigo-600 text-white py-3 rounded-xl font-bold shadow-lg shadow-indigo-500/30 transition-all transform hover:scale-[1.02]">
+                            {{ auth.loading ? 'Загрузка...' : (isRegistering ? 'Создать аккаунт' : 'Войти в систему') }}
+                        </button>
+                    </form>
+
+                    <div class="mt-6 text-center">
+                        <button @click="isRegistering = !isRegistering" class="text-sm text-slate-400 hover:text-white transition">
+                            {{ isRegistering ? 'Уже есть аккаунт? Войти' : 'Нет аккаунта? Регистрация' }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- GRAPH VIEW -->
+            <div v-else-if="currentView === 'graph'" class="animate-fade-in">
+                <div class="glass-panel p-1 rounded-2xl h-[75vh] relative overflow-hidden flex flex-col">
+                    <div class="absolute top-4 left-4 z-10 bg-black/50 backdrop-blur p-3 rounded-xl border border-white/10 max-w-xs">
+                        <h3 class="text-white font-bold text-lg flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-neon-pink"></span>
+                            Карта мыслей
+                        </h3>
+                        <p class="text-xs text-slate-400 mt-1">
+                            Визуализация связей между вашими заметками. Размер узла зависит от популярности.
+                            <br><span class="text-pulse-accent">Нажмите на узел для просмотра.</span>
+                        </p>
+                    </div>
+
+                    <!-- Контейнер для графа -->
+                    <div id="graph-container" class="w-full h-full bg-slate-900 rounded-xl cursor-move"></div>
+
+                    <!-- Модалка предпросмотра поста из графа -->
+                    <div v-if="selectedNode" class="absolute bottom-4 left-4 right-4 sm:right-auto sm:w-96 glass-panel p-4 rounded-xl border-l-4 border-neon-pink shadow-2xl animate-slide-up z-20">
+                        <div class="flex justify-between items-start">
+                            <h4 class="font-bold text-white truncate pr-4">Заметка ID: {{ selectedNode.id.substring(0,6) }}</h4>
+                            <button @click="selectedNode = null" class="text-slate-400 hover:text-white">&times;</button>
+                        </div>
+                        <p class="text-slate-300 text-sm mt-2 line-clamp-3">{{ selectedNode.name }}</p>
+                        <div class="mt-3 flex gap-2">
+                            <span class="text-xs bg-slate-700 px-2 py-1 rounded text-slate-300">#{{ selectedNode.group }}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- FEED VIEW -->
+            <div v-else class="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fade-in">
+
+                <!-- Left Column: Create Post -->
+                <div class="lg:col-span-1 space-y-6">
+                    <div class="glass-panel p-5 rounded-2xl sticky top-24">
+                        <h2 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                            <svg class="w-5 h-5 text-pulse-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                            Новая запись
+                        </h2>
+                        <form @submit.prevent="createPost" class="space-y-3">
+                            <textarea v-model="newPost.content" class="input min-h-[120px]" placeholder="О чем вы думаете?" required></textarea>
+
+                            <input v-model="tagsString" class="input text-sm" placeholder="Теги: #tech, #life...">
+
+                            <div class="relative">
+                                <select v-model="newPost.relatedPostId" class="input text-sm appearance-none cursor-pointer text-slate-400">
+                                    <option value="">Без связи (Свободный узел)</option>
+                                    <option v-for="post in userPosts" :value="post.id" :key="post.id">
+                                        🔗 {{ post.content.substring(0, 20) }}...
+                                    </option>
+                                </select>
+                                <div class="absolute right-3 top-3 pointer-events-none text-slate-500">▼</div>
+                            </div>
+
+                            <button type="submit" class="w-full bg-gradient-to-r from-pulse-accent to-indigo-600 hover:from-indigo-500 hover:to-pulse-accent text-white py-2 rounded-xl font-semibold shadow-lg transition-all">
+                                Опубликовать в Pulse
+                            </button>
+                        </form>
+                    </div>
+
+                    <!-- Stats Panel -->
+                    <div class="glass-panel p-5 rounded-2xl hidden lg:block">
+                        <h3 class="text-slate-400 text-sm font-bold uppercase tracking-wider mb-3">Ваш нейро-профиль</h3>
+                        <div class="flex flex-wrap gap-2">
+                            <!-- ИСПРАВЛЕНО: preferredTags -> preferred_tags -->
+                            <span v-for="(score, tag) in userProfile.preferred_tags" :key="tag" class="bg-slate-800 border border-slate-700 text-pulse-glow px-3 py-1 rounded-lg text-xs flex items-center gap-2">
+                                #{{ tag }}
+                                <span class="bg-slate-900 px-1.5 rounded text-white font-mono">{{ score }}</span>
+                            </span>
+                            <!-- ИСПРАВЛЕНО: preferredTags -> preferred_tags -->
+                            <span v-if="!userProfile.preferred_tags || Object.keys(userProfile.preferred_tags).length === 0" class="text-slate-500 text-sm italic">Нет данных. Лайкайте посты!</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Column: Feed -->
+                <div class="lg:col-span-2 space-y-4 pb-20">
+                    <div v-if="posts.length === 0" class="glass-panel p-10 rounded-2xl text-center">
+                        <p class="text-slate-400">Лента пуста. Будьте первым!</p>
+                    </div>
+
+                    <div v-for="post in posts" :key="post.id" class="glass-panel p-5 rounded-2xl transition-all hover:border-pulse-accent/50 group relative overflow-hidden">
+
+                        <!-- Score Indicator -->
+                        <div v-if="post.score > 0" class="absolute top-0 right-0 bg-pulse-accent/20 text-pulse-accent text-[10px] font-bold px-2 py-1 rounded-bl-lg border-l border-b border-pulse-accent/20">
+                            MATCH {{ Math.round(post.score) }}%
+                        </div>
+
+                        <div class="flex justify-between items-start mb-3">
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 rounded-full bg-gradient-to-br from-slate-700 to-slate-800 flex items-center justify-center text-xs font-mono text-slate-300 border border-slate-600">
+                                    {{ post.author_id.substring(0, 2) }}
+                                </div>
+                                <div>
+                                    <div class="text-sm font-bold text-white flex items-center gap-2">
+                                        User {{ post.author_id.substring(0, 6) }}
+                                        <span v-if="post.author_id === userId" class="text-[10px] bg-slate-700 px-1.5 rounded text-slate-300">ВЫ</span>
+                                    </div>
+                                    <div class="text-xs text-slate-500">{{ formatDate(post.timestamp) }}</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <p class="text-slate-200 mb-4 whitespace-pre-wrap leading-relaxed">{{ post.content }}</p>
+
+                        <!-- Tags & Graph Link -->
+                        <div class="flex flex-wrap gap-2 mb-4">
+                            <span v-for="tag in post.tags" :key="tag" class="text-xs font-medium text-pulse-glow cursor-pointer hover:underline">#{{ tag }}</span>
+                        </div>
+
+                        <div v-if="post.related_post_id" class="mb-4 p-3 rounded-lg bg-slate-800/50 border border-slate-700/50 flex items-center gap-3">
+                            <div class="w-1 h-8 bg-neon-pink rounded-full"></div>
+                            <div class="text-xs">
+                                <span class="text-slate-500 block uppercase tracking-wider text-[10px]">Связанная мысль</span>
+                                <span class="text-slate-300 font-mono">ID: {{ post.related_post_id.substring(0, 8) }}...</span>
+                            </div>
+                        </div>
+
+                        <!-- Actions -->
+                        <div class="flex items-center justify-between pt-3 border-t border-slate-700/50">
+                            <button @click="toggleLike(post.id)" class="flex items-center gap-2 text-sm transition-colors" :class="post.hasLiked ? 'text-neon-pink' : 'text-slate-400 hover:text-white'">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 transition-transform active:scale-125" :fill="post.hasLiked ? 'currentColor' : 'none'" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                                </svg>
+                                <span>{{ post.likes.length }}</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+<script>
+const { createApp } = Vue;
+const API_URL = "http://127.0.0.1:8000";
+
+createApp({
+    data() {
+        return {
+            authToken: null,
+            userId: null,
+            isReady: false,
+            loading: false,
+            isRegistering: false,
+            currentView: 'login', // 'login', 'feed', 'graph'
+
+            posts: [],
+            userPosts: [], // Посты только текущего юзера (для селекта и графа)
+
+            // ИСПРАВЛЕНО: Инициализируем в формате snake_case, чтобы соответствовать API
+            userProfile: { preferred_tags: {} },
+
+            newPost: { content: "", relatedPostId: "" },
+            tagsString: "",
+            auth: { email: "", password: "", loading: false, error: "" },
+
+            // Graph Data
+            graphInstance: null,
+            selectedNode: null
+        };
+    },
+
+    mounted() {
+        this.loadState();
+        if (this.authToken) {
+            this.initApp();
+        } else {
+            this.isReady = true;
+        }
+    },
+
+    watch: {
+        // Следим за сменой вида, чтобы инициализировать граф
+        currentView(newVal) {
+            if (newVal === 'graph') {
+                this.$nextTick(() => this.initGraph());
+            }
+        }
+    },
+
+    computed: {
+        postTags() {
+            return this.tagsString.split(",").map(t => t.trim().toLowerCase()).filter(t => t.length > 0);
+        }
+    },
+
+    methods: {
+        async initApp() {
+            this.loading = true;
+            try {
+                await Promise.all([this.fetchUserProfile(), this.fetchFeed()]);
+                this.currentView = 'feed';
+            } catch (e) {
+                console.error("Ошибка инициализации:", e);
+            } finally {
+                this.isReady = true;
+                this.loading = false;
+            }
+        },
+
+        formatDate(ts) {
+            let date = new Date(ts);
+            return isNaN(date) ? ts : date.toLocaleDateString('ru-RU', {day:'numeric', month:'short', hour:'2-digit', minute:'2-digit'});
+        },
+
+        // --- LOCAL STORAGE ---
+        saveState() {
+            if (this.authToken) {
+                localStorage.setItem('pulse_token', this.authToken);
+                localStorage.setItem('pulse_uid', this.userId);
+            } else {
+                localStorage.clear();
+            }
+        },
+        loadState() {
+            this.authToken = localStorage.getItem('pulse_token');
+            this.userId = localStorage.getItem('pulse_uid');
+        },
+        getHeaders(auth = true) {
+            const h = { "Content-Type": "application/json" };
+            if (auth && this.authToken) h["Authorization"] = `Bearer ${this.authToken}`;
+            return h;
+        },
+
+        // --- AUTH ---
+        async authAction(endpoint) {
+            this.auth.loading = true;
+            this.auth.error = "";
+            try {
+                const res = await fetch(`${API_URL}/${endpoint}`, {
+                    method: "POST", headers: this.getHeaders(false),
+                    body: JSON.stringify(this.auth)
+                });
+                if (!res.ok) throw new Error((await res.json()).detail);
+                const data = await res.json();
+                this.authToken = data.token;
+                this.userId = data.user_id;
+                this.saveState();
+                this.initApp();
+            } catch (e) {
+                this.auth.error = e.message;
+            } finally {
+                this.auth.loading = false;
+            }
+        },
+        login() { this.authAction('login'); },
+        register() { this.authAction('register'); },
+        logout() {
+            this.authToken = null;
+            this.saveState();
+            this.currentView = 'login';
+            this.posts = [];
+            this.userPosts = [];
+        },
+
+        // --- DATA ---
+        async fetchUserProfile() {
+            if(!this.userId) return;
+            try {
+                const res = await fetch(`${API_URL}/users/${this.userId}`, { headers: this.getHeaders() });
+                if(res.ok) this.userProfile = await res.json();
+
+                // Убедимся, что preferred_tags существует (защита от null)
+                if (!this.userProfile.preferred_tags) {
+                    this.userProfile.preferred_tags = {};
+                }
+            } catch(e) { console.error(e); }
+        },
+        async fetchFeed() {
+            try {
+                const res = await fetch(`${API_URL}/posts`, { headers: this.getHeaders() });
+
+                if (res.status === 401) return this.logout();
+
+                if (!res.ok) {
+                    console.error("Ошибка загрузки ленты:", res.statusText);
+                    return;
+                }
+
+                this.posts = await res.json();
+                if(this.userId && Array.isArray(this.posts)) {
+                    this.userPosts = this.posts.filter(p => p.author_id === this.userId);
+                }
+            } catch(e) {
+                console.error("Fetch Feed Error:", e);
+            }
+        },
+
+        // --- ACTIONS ---
+        async createPost() {
+            if (!this.newPost.content.trim()) return;
+            try {
+                const res = await fetch(`${API_URL}/posts/create`, {
+                    method: "POST", headers: this.getHeaders(),
+                    body: JSON.stringify({
+                        content: this.newPost.content,
+                        tags: this.postTags,
+                        related_post_id: this.newPost.relatedPostId || null
+                    })
+                });
+                if(!res.ok) throw new Error("Ошибка");
+                this.newPost.content = ""; this.tagsString = ""; this.newPost.relatedPostId = "";
+                this.fetchFeed(); // Обновить ленту
+                this.switchView('feed'); // Вернуться в ленту если мы не там
+            } catch(e) { alert(e.message); }
+        },
+        async toggleLike(id) {
+            await fetch(`${API_URL}/posts/${id}/like`, { method: "POST", headers: this.getHeaders() });
+            this.fetchFeed(); this.fetchUserProfile();
+        },
+
+        switchView(view) {
+            this.currentView = view;
+        },
+
+        // --- GRAPH LOGIC (Pulse Map) ---
+        async initGraph() {
+            const container = document.getElementById('graph-container');
+            if (!container) return; // Контейнер еще не отрендерился
+
+            // Загружаем данные
+            try {
+                const res = await fetch(`${API_URL}/users/${this.userId}/graph`, { headers: this.getHeaders() });
+                const graphData = await res.json();
+
+                // Очищаем контейнер
+                container.innerHTML = '';
+
+                // Инициализация ForceGraph
+                this.graphInstance = ForceGraph()(container)
+                    .graphData(graphData)
+                    .nodeLabel('name') // Текст при наведении
+                    .nodeVal('val') // Размер узла
+                    .nodeColor(node => {
+                        // Цвет в зависимости от группы или случайный неон
+                        return node.group === 'general' ? '#6366f1' : '#ec4899';
+                    })
+                    .linkColor(() => 'rgba(255,255,255,0.2)')
+                    .backgroundColor('#0f172a')
+                    .onNodeClick(node => {
+                        this.selectedNode = node;
+                        // Камера фокусируется на узле
+                        this.graphInstance.centerAt(node.x, node.y, 1000);
+                        this.graphInstance.zoom(4, 2000);
+                    })
+                    .onBackgroundClick(() => {
+                        this.selectedNode = null;
+                        this.graphInstance.zoom(1, 1000);
+                    });
+
+            } catch (e) {
+                console.error("Graph error:", e);
+                container.innerHTML = '<p class="text-red-500 p-4">Ошибка загрузки графа</p>';
+            }
+        }
+    }
+}).mount("#app");
+</script>
+
+<style>
+    /* Простые анимации для UI */
+    @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+    .animate-fade-in { animation: fade-in 0.5s ease-out; }
+
+    @keyframes slide-up { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    .animate-slide-up { animation: slide-up 0.3s ease-out; }
+</style>
+
+</body>
+</html>
