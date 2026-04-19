@@ -7,7 +7,7 @@
 
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Force Graph Library для визуализации -->
+    <!-- Force Graph Library -->
     <script src="https://unpkg.com/force-graph"></script>
 
     <script>
@@ -16,10 +16,10 @@
             theme: {
                 extend: {
                     colors: {
-                        'pulse-dark': '#0f172a', // Slate-900
-                        'pulse-panel': '#1e293b', // Slate-800
-                        'pulse-accent': '#6366f1', // Indigo-500
-                        'pulse-glow': '#818cf8', // Indigo-400
+                        'pulse-dark': '#0f172a',
+                        'pulse-panel': '#1e293b',
+                        'pulse-accent': '#6366f1',
+                        'pulse-glow': '#818cf8',
                         'neon-pink': '#ec4899',
                     },
                     fontFamily: {
@@ -34,7 +34,6 @@
             background-color: #0f172a;
             color: #e2e8f0;
         }
-        /* Стеклянный эффект */
         .glass-panel {
             background: rgba(30, 41, 59, 0.7);
             backdrop-filter: blur(12px);
@@ -54,17 +53,24 @@
             outline: none;
             box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.3);
         }
-        /* Анимация градиента текста */
         .text-gradient {
             background: linear-gradient(to right, #818cf8, #ec4899);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
-
-        /* Стили для канваса графа */
-        #graph-container canvas{
+        #graph-container canvas {
             filter: drop-shadow(0 0 8px rgba(99,102,241,0.25));
         }
+        @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+        .animate-fade-in { animation: fade-in 0.5s ease-out; }
+        @keyframes slide-up { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .animate-slide-up { animation: slide-up 0.3s ease-out; }
+        .custom-scroll::-webkit-scrollbar { width: 6px; }
+        .custom-scroll::-webkit-scrollbar-track { background: #1e293b; border-radius: 10px; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #475569; border-radius: 10px; }
+        .line-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+        .line-clamp-3 { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+        .line-clamp-4 { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
     </style>
 
     <!-- Vue 3 -->
@@ -85,12 +91,15 @@
 
             <div class="flex items-center space-x-4">
                 <template v-if="authToken">
-                     <!-- Переключатель режимов -->
                     <div class="flex bg-slate-900 rounded-full p-1 border border-slate-700">
                         <button @click="switchView('feed')" :class="currentView === 'feed' ? 'bg-pulse-accent text-white' : 'text-slate-400 hover:text-white'" class="px-4 py-1 rounded-full text-sm font-medium transition-all">Лента</button>
                         <button @click="switchView('graph')" :class="currentView === 'graph' ? 'bg-neon-pink text-white' : 'text-slate-400 hover:text-white'" class="px-4 py-1 rounded-full text-sm font-medium transition-all flex items-center gap-1">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
                             Граф
+                        </button>
+                        <button @click="switchView('community')" :class="currentView === 'community' ? 'bg-emerald-500 text-white' : 'text-slate-400 hover:text-white'" class="px-4 py-1 rounded-full text-sm font-medium transition-all flex items-center gap-1">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+                            Сообщества
                         </button>
                     </div>
 
@@ -107,12 +116,10 @@
 
         <main class="flex-grow p-4 sm:p-6">
 
-            <!-- Loader -->
             <div v-if="!isReady || loading" class="flex justify-center items-center h-64">
                 <div class="w-12 h-12 border-4 border-pulse-accent border-t-transparent rounded-full animate-spin"></div>
             </div>
 
-            <!-- AUTH VIEW -->
             <div v-else-if="!authToken" class="flex justify-center items-center min-h-[60vh]">
                 <div class="glass-panel p-8 rounded-3xl shadow-2xl w-full max-w-md border-t border-white/10">
                     <h2 class="text-3xl font-bold mb-2 text-center text-white">Добро пожаловать</h2>
@@ -143,41 +150,112 @@
                 </div>
             </div>
 
-            <!-- GRAPH VIEW -->
-            <div v-else-if="currentView === 'graph'" class="animate-fade-in">
-                <div class="glass-panel p-1 rounded-2xl h-[75vh] relative overflow-hidden flex flex-col">
-                    <div class="absolute top-4 left-4 z-10 bg-black/50 backdrop-blur p-3 rounded-xl border border-white/10 max-w-xs">
-                        <h3 class="text-white font-bold text-lg flex items-center gap-2">
-                            <span class="w-2 h-2 rounded-full bg-neon-pink"></span>
-                            Карта мыслей
-                        </h3>
-                        <p class="text-xs text-slate-400 mt-1">
-                            Визуализация связей между вашими заметками. Размер узла зависит от популярности.
-                            <br><span class="text-pulse-accent">Нажмите на узел для просмотра.</span>
-                        </p>
+            <div v-else-if="currentView === 'graph'" class="animate-fade-in h-full">
+                <div class="glass-panel rounded-2xl h-[calc(100vh-120px)] relative overflow-hidden flex flex-col">
+                    <div class="p-4 border-b border-slate-700/50 flex items-center justify-between flex-wrap gap-3">
+                        <div class="flex items-center gap-3">
+                            <h3 class="text-white font-bold text-lg flex items-center gap-2">
+                                <span class="w-2 h-2 rounded-full bg-neon-pink animate-pulse"></span>
+                                Граф знаний
+                            </h3>
+                            <span class="text-xs text-slate-400 bg-slate-800 px-2 py-1 rounded">
+                                {{ graphNodes.length }} заметок
+                            </span>
+                        </div>
+
+                        <div class="flex items-center gap-3">
+                            <button @click="resetGraphView" class="text-xs bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-lg transition flex items-center gap-1">
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path>
+                                </svg>
+                                Сброс
+                            </button>
+
+                            <button @click="refreshGraph" class="text-xs bg-pulse-accent hover:bg-indigo-600 px-3 py-1.5 rounded-lg transition flex items-center gap-1">
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                                </svg>
+                                Обновить
+                            </button>
+                        </div>
                     </div>
 
-                    <!-- Контейнер для графа -->
-                    <div id="graph-container" style="width:100%; height:75vh;"></div>
+                    <div class="flex-1 relative">
+                        <div id="graph-container" style="width:100%; height:100%;"></div>
 
-                    <!-- Модалка предпросмотра поста из графа -->
-                    <div v-if="selectedNode" class="absolute bottom-4 left-4 right-4 sm:right-auto sm:w-96 glass-panel p-4 rounded-xl border-l-4 border-neon-pink shadow-2xl animate-slide-up z-20">
-                        <div class="flex justify-between items-start">
-                            <h4 class="font-bold text-white truncate pr-4">Заметка ID: {{ selectedNode.id.substring(0,6) }}</h4>
-                            <button @click="selectedNode = null" class="text-slate-400 hover:text-white">&times;</button>
+                        <div class="absolute bottom-4 left-4 glass-panel p-3 rounded-lg text-xs">
+                            <div class="text-white font-medium mb-2">Легенда</div>
+                            <div class="space-y-1">
+                                <div class="flex items-center gap-2">
+                                    <div class="w-3 h-3 rounded-full bg-pulse-accent"></div>
+                                    <span class="text-slate-300">Ваши заметки</span>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <div class="w-3 h-3 rounded-full bg-neon-pink"></div>
+                                    <span class="text-slate-300">Выбранная заметка</span>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <div class="w-0.5 h-4 bg-white/30 mx-auto"></div>
+                                    <span class="text-slate-300">Связь между заметками</span>
+                                </div>
+                            </div>
                         </div>
-                        <p class="text-slate-300 text-sm mt-2 line-clamp-3">{{ selectedNode.name }}</p>
-                        <div class="mt-3 flex gap-2">
-                            <span class="text-xs bg-slate-700 px-2 py-1 rounded text-slate-300">#{{ selectedNode.group }}</span>
+
+                        <div v-if="selectedGraphNode" class="absolute top-4 right-4 w-80 glass-panel p-4 rounded-xl border-l-4 border-neon-pink shadow-2xl animate-slide-up z-20">
+                            <div class="flex justify-between items-start mb-3">
+                                <h4 class="font-bold text-white text-sm truncate pr-4">
+                                    {{ selectedGraphNode.name }}
+                                </h4>
+                                <button @click="selectedGraphNode = null" class="text-slate-400 hover:text-white">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                    </svg>
+                                </button>
+                            </div>
+
+                            <div class="space-y-3">
+                                <div>
+                                    <div class="text-xs text-slate-400 mb-1">ID заметки</div>
+                                    <code class="text-xs bg-slate-800 px-2 py-1 rounded text-pulse-glow">{{ selectedGraphNode.id.substring(0, 8) }}...</code>
+                                </div>
+
+                                <div>
+                                    <div class="text-xs text-slate-400 mb-1">Содержание</div>
+                                    <p class="text-sm text-slate-300 line-clamp-4">{{ getPostContent(selectedGraphNode.id) }}</p>
+                                </div>
+
+                                <div>
+                                    <div class="text-xs text-slate-400 mb-1">Теги</div>
+                                    <div class="flex flex-wrap gap-1">
+                                        <span v-for="tag in getPostTags(selectedGraphNode.id)" :key="tag" class="text-xs bg-slate-700 px-2 py-0.5 rounded text-slate-300">#{{ tag }}</span>
+                                        <span v-if="!getPostTags(selectedGraphNode.id).length" class="text-xs text-slate-500">Нет тегов</span>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <div class="text-xs text-slate-400 mb-1">Связи</div>
+                                    <div class="text-sm text-slate-300">
+                                        {{ getConnectedNodesCount(selectedGraphNode.id) }} связанных заметок
+                                    </div>
+                                </div>
+
+                                <button @click="focusOnNode(selectedGraphNode)" class="w-full mt-2 bg-slate-800 hover:bg-slate-700 text-white text-xs py-2 rounded-lg transition">
+                                    Сфокусироваться на заметке
+                                </button>
+                            </div>
+                        </div>
+
+                        <div v-if="graphLoading" class="absolute inset-0 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm z-30">
+                            <div class="glass-panel p-6 rounded-xl text-center">
+                                <div class="w-8 h-8 border-3 border-pulse-accent border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+                                <p class="text-slate-300">Построение графа...</p>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- FEED VIEW -->
-            <div v-else class="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fade-in">
-
-                <!-- Left Column: Create Post -->
+            <div v-else-if="currentView === 'feed'" class="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fade-in">
                 <div class="lg:col-span-1 space-y-6">
                     <div class="glass-panel p-5 rounded-2xl sticky top-24">
                         <h2 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
@@ -186,9 +264,7 @@
                         </h2>
                         <form @submit.prevent="createPost" class="space-y-3">
                             <textarea v-model="newPost.content" class="input min-h-[120px]" placeholder="О чем вы думаете?" required></textarea>
-
-                            <input v-model="tagsString" class="input text-sm" placeholder="Теги: #tech, #life...">
-
+                            <input v-model="tagsString" class="input text-sm" placeholder="Теги: tech, life, work">
                             <div class="relative">
                                 <select v-model="newPost.relatedPostId" class="input text-sm appearance-none cursor-pointer text-slate-400">
                                     <option value="">Без связи (Свободный узел)</option>
@@ -198,41 +274,37 @@
                                 </select>
                                 <div class="absolute right-3 top-3 pointer-events-none text-slate-500">▼</div>
                             </div>
-
+                            <div class="flex items-center gap-3 pt-2">
+                                <input type="checkbox" v-model="newPost.publicAnalysis" id="publicAnalysisCheck" class="w-4 h-4 rounded bg-slate-700 border-slate-600 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-slate-900">
+                                <label for="publicAnalysisCheck" class="text-sm text-slate-300 cursor-pointer select-none">Разрешить публичный анализ (видно в сообществах)</label>
+                            </div>
                             <button type="submit" class="w-full bg-gradient-to-r from-pulse-accent to-indigo-600 hover:from-indigo-500 hover:to-pulse-accent text-white py-2 rounded-xl font-semibold shadow-lg transition-all">
                                 Опубликовать в Pulse
                             </button>
                         </form>
                     </div>
 
-                    <!-- Stats Panel -->
                     <div class="glass-panel p-5 rounded-2xl hidden lg:block">
                         <h3 class="text-slate-400 text-sm font-bold uppercase tracking-wider mb-3">Ваш нейро-профиль</h3>
                         <div class="flex flex-wrap gap-2">
-                            <!-- ИСПРАВЛЕНО: preferredTags -> preferred_tags -->
                             <span v-for="(score, tag) in userProfile.preferred_tags" :key="tag" class="bg-slate-800 border border-slate-700 text-pulse-glow px-3 py-1 rounded-lg text-xs flex items-center gap-2">
                                 #{{ tag }}
                                 <span class="bg-slate-900 px-1.5 rounded text-white font-mono">{{ score }}</span>
                             </span>
-                            <!-- ИСПРАВЛЕНО: preferredTags -> preferred_tags -->
                             <span v-if="!userProfile.preferred_tags || Object.keys(userProfile.preferred_tags).length === 0" class="text-slate-500 text-sm italic">Нет данных. Лайкайте посты!</span>
                         </div>
                     </div>
                 </div>
 
-                <!-- Right Column: Feed -->
                 <div class="lg:col-span-2 space-y-4 pb-20">
                     <div v-if="posts.length === 0" class="glass-panel p-10 rounded-2xl text-center">
                         <p class="text-slate-400">Лента пуста. Будьте первым!</p>
                     </div>
 
                     <div v-for="post in posts" :key="post.id" class="glass-panel p-5 rounded-2xl transition-all hover:border-pulse-accent/50 group relative overflow-hidden">
-
-                        <!-- Score Indicator -->
                         <div v-if="post.score > 0" class="absolute top-0 right-0 bg-pulse-accent/20 text-pulse-accent text-[10px] font-bold px-2 py-1 rounded-bl-lg border-l border-b border-pulse-accent/20">
                             MATCH {{ Math.round(post.score) }}%
                         </div>
-
                         <div class="flex justify-between items-start mb-3">
                             <div class="flex items-center gap-3">
                                 <div class="w-10 h-10 rounded-full bg-gradient-to-br from-slate-700 to-slate-800 flex items-center justify-center text-xs font-mono text-slate-300 border border-slate-600">
@@ -247,14 +319,10 @@
                                 </div>
                             </div>
                         </div>
-
                         <p class="text-slate-200 mb-4 whitespace-pre-wrap leading-relaxed">{{ post.content }}</p>
-
-                        <!-- Tags & Graph Link -->
                         <div class="flex flex-wrap gap-2 mb-4">
                             <span v-for="tag in post.tags" :key="tag" class="text-xs font-medium text-pulse-glow cursor-pointer hover:underline">#{{ tag }}</span>
                         </div>
-
                         <div v-if="post.related_post_id" class="mb-4 p-3 rounded-lg bg-slate-800/50 border border-slate-700/50 flex items-center gap-3">
                             <div class="w-1 h-8 bg-neon-pink rounded-full"></div>
                             <div class="text-xs">
@@ -262,8 +330,6 @@
                                 <span class="text-slate-300 font-mono">ID: {{ post.related_post_id.substring(0, 8) }}...</span>
                             </div>
                         </div>
-
-                        <!-- Actions -->
                         <div class="flex items-center justify-between pt-3 border-t border-slate-700/50">
                             <button @click="toggleLike(post.id)" class="flex items-center gap-2 text-sm transition-colors" :class="post.hasLiked ? 'text-neon-pink' : 'text-slate-400 hover:text-white'">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 transition-transform active:scale-125" :fill="post.hasLiked ? 'currentColor' : 'none'" viewBox="0 0 24 24" stroke="currentColor">
@@ -271,6 +337,92 @@
                                 </svg>
                                 <span>{{ post.likes.length }}</span>
                             </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div v-else-if="currentView === 'community'" class="animate-fade-in">
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div class="lg:col-span-1">
+                        <div class="glass-panel p-5 rounded-2xl sticky top-24">
+                            <h2 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                                <svg class="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
+                                Публичные заметки
+                            </h2>
+                            <p class="text-xs text-slate-400 mb-4">Отметьте заметки, которые можно использовать для поиска единомышленников.</p>
+                            <div class="space-y-3 max-h-96 overflow-y-auto pr-2 custom-scroll">
+                                <div v-if="userPosts.length === 0" class="text-slate-500 text-sm text-center py-4">
+                                    У вас пока нет заметок.
+                                </div>
+                                <div v-for="post in userPosts" :key="post.id" class="p-3 rounded-lg bg-slate-800/40 border border-slate-700/50 flex items-start gap-3">
+                                    <input type="checkbox" :checked="post.public_analysis" @change="togglePostPublic(post.id)" class="mt-1 w-4 h-4 rounded bg-slate-700 border-slate-600 text-emerald-500 focus:ring-emerald-500">
+                                    <div class="flex-1 min-w-0">
+                                        <p class="text-sm text-slate-200 line-clamp-2">{{ post.content }}</p>
+                                        <div class="flex flex-wrap gap-1 mt-1">
+                                            <span v-for="tag in post.tags.slice(0,3)" :key="tag" class="text-[10px] text-slate-400 bg-slate-700/50 px-1.5 py-0.5 rounded">#{{ tag }}</span>
+                                            <span v-if="post.tags.length > 3" class="text-[10px] text-slate-500">+{{ post.tags.length - 3 }}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="mt-4 text-xs text-slate-500 border-t border-slate-700/50 pt-3">
+                                <p>🔒 Публичные заметки видны в разделе «Сообщества» и используются для поиска похожих пользователей.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="lg:col-span-2 space-y-4">
+                        <div class="glass-panel p-5 rounded-2xl">
+                            <div class="flex items-center justify-between mb-4">
+                                <h2 class="text-xl font-bold text-white flex items-center gap-2">
+                                    <span class="w-2 h-6 bg-emerald-500 rounded-full"></span>
+                                    Единомышленники
+                                </h2>
+                                <button @click="fetchCommunityRecommendations" :disabled="communityLoading" class="text-sm bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-lg transition flex items-center gap-2">
+                                    <svg class="w-4 h-4" :class="{'animate-spin': communityLoading}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                                    Обновить
+                                </button>
+                            </div>
+
+                            <div v-if="communityLoading" class="py-12 text-center">
+                                <div class="w-8 h-8 border-3 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                                <p class="text-slate-400 mt-3">Анализируем сообщество...</p>
+                            </div>
+
+                            <div v-else-if="communityUsers.length === 0" class="py-12 text-center text-slate-400">
+                                <svg class="w-12 h-12 mx-auto mb-3 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+                                <p>Пока нет рекомендаций.</p>
+                                <p class="text-sm mt-2">Сделайте несколько заметок публичными, чтобы найти единомышленников.</p>
+                            </div>
+
+                            <div v-else class="space-y-3">
+                                <div v-for="user in communityUsers" :key="user.user_id" class="p-4 rounded-xl bg-slate-800/40 border border-slate-700/50 hover:border-emerald-500/30 transition-all">
+                                    <div class="flex items-start gap-4">
+                                        <div class="w-12 h-12 rounded-full bg-gradient-to-br from-emerald-600 to-teal-700 flex items-center justify-center text-white font-bold text-lg shadow-lg">
+                                            {{ user.user_id.substring(0,2).toUpperCase() }}
+                                        </div>
+                                        <div class="flex-1">
+                                            <div class="flex items-center gap-2 flex-wrap">
+                                                <span class="font-mono text-sm text-white">{{ user.user_id.substring(0,8) }}...</span>
+                                                <span class="bg-emerald-500/20 text-emerald-400 text-xs px-2 py-0.5 rounded-full font-medium">
+                                                    Совпадение {{ Math.round(user.similarity * 100) }}%
+                                                </span>
+                                            </div>
+                                            <div class="mt-2 flex flex-wrap gap-1">
+                                                <span v-for="tag in user.common_tags.slice(0,5)" :key="tag" class="text-xs bg-slate-700/70 text-pulse-glow px-2 py-0.5 rounded">
+                                                    #{{ tag }}
+                                                </span>
+                                                <span v-if="user.common_tags.length > 5" class="text-xs text-slate-500">+{{ user.common_tags.length - 5 }}</span>
+                                                <span v-if="user.common_tags.length === 0" class="text-xs text-slate-500">Нет общих тегов</span>
+                                            </div>
+                                            <div class="mt-2 text-xs text-slate-400">
+                                                Публичных заметок: {{ user.public_posts_count }}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -290,21 +442,28 @@ createApp({
             isReady: false,
             loading: false,
             isRegistering: false,
-            currentView: 'login', // 'login', 'feed', 'graph'
+            currentView: 'feed',
 
             posts: [],
-            userPosts: [], // Посты только текущего юзера (для селекта и графа)
-
-            // ИСПРАВЛЕНО: Инициализируем в формате snake_case, чтобы соответствовать API
+            userPosts: [],
             userProfile: { preferred_tags: {} },
 
-            newPost: { content: "", relatedPostId: "" },
+            newPost: {
+                content: "",
+                relatedPostId: "",
+                publicAnalysis: false
+            },
             tagsString: "",
             auth: { email: "", password: "", loading: false, error: "" },
 
-            // Graph Data
             graphInstance: null,
-            selectedNode: null
+            graphNodes: [],
+            graphLinks: [],
+            selectedGraphNode: null,
+            graphLoading: false,
+
+            communityUsers: [],
+            communityLoading: false,
         };
     },
 
@@ -318,10 +477,12 @@ createApp({
     },
 
     watch: {
-        // Следим за сменой вида, чтобы инициализировать граф
         currentView(newVal) {
             if (newVal === 'graph') {
                 this.$nextTick(() => this.initGraph());
+            }
+            if (newVal === 'community') {
+                this.fetchCommunityRecommendations();
             }
         }
     },
@@ -336,7 +497,7 @@ createApp({
         async initApp() {
             this.loading = true;
             try {
-                await Promise.all([this.fetchUserProfile(), this.fetchFeed()]);
+                await this.fetchFeed();
                 this.currentView = 'feed';
             } catch (e) {
                 console.error("Ошибка инициализации:", e);
@@ -351,7 +512,6 @@ createApp({
             return isNaN(date) ? ts : date.toLocaleDateString('ru-RU', {day:'numeric', month:'short', hour:'2-digit', minute:'2-digit'});
         },
 
-        // --- LOCAL STORAGE ---
         saveState() {
             if (this.authToken) {
                 localStorage.setItem('pulse_token', this.authToken);
@@ -370,7 +530,6 @@ createApp({
             return h;
         },
 
-        // --- AUTH ---
         async authAction(endpoint) {
             this.auth.loading = true;
             this.auth.error = "";
@@ -401,40 +560,33 @@ createApp({
             this.userPosts = [];
         },
 
-        // --- DATA ---
-        async fetchUserProfile() {
-            if(!this.userId) return;
-            try {
-                const res = await fetch(`${API_URL}/users/${this.userId}`, { headers: this.getHeaders() });
-                if(res.ok) this.userProfile = await res.json();
-
-                // Убедимся, что preferred_tags существует (защита от null)
-                if (!this.userProfile.preferred_tags) {
-                    this.userProfile.preferred_tags = {};
-                }
-            } catch(e) { console.error(e); }
-        },
         async fetchFeed() {
             try {
                 const res = await fetch(`${API_URL}/posts`, { headers: this.getHeaders() });
-
                 if (res.status === 401) return this.logout();
-
-                if (!res.ok) {
-                    console.error("Ошибка загрузки ленты:", res.statusText);
-                    return;
-                }
-
+                if (!res.ok) return;
                 this.posts = await res.json();
+                this.posts = this.posts.map(p => ({
+                    ...p,
+                    hasLiked: p.likes.includes(this.userId)
+                }));
                 if(this.userId && Array.isArray(this.posts)) {
                     this.userPosts = this.posts.filter(p => p.author_id === this.userId);
                 }
-            } catch(e) {
-                console.error("Fetch Feed Error:", e);
-            }
+                this.updateUserProfileFromPosts();
+            } catch(e) { console.error(e); }
         },
 
-        // --- ACTIONS ---
+        updateUserProfileFromPosts() {
+            const tagScores = {};
+            this.userPosts.forEach(post => {
+                post.tags.forEach(tag => {
+                    tagScores[tag] = (tagScores[tag] || 0) + 1;
+                });
+            });
+            this.userProfile.preferred_tags = tagScores;
+        },
+
         async createPost() {
             if (!this.newPost.content.trim()) return;
             try {
@@ -443,90 +595,243 @@ createApp({
                     body: JSON.stringify({
                         content: this.newPost.content,
                         tags: this.postTags,
-                        related_post_id: this.newPost.relatedPostId || null
+                        related_post_id: this.newPost.relatedPostId || null,
+                        public_analysis: this.newPost.publicAnalysis
                     })
                 });
                 if(!res.ok) throw new Error("Ошибка");
-                this.newPost.content = ""; this.tagsString = ""; this.newPost.relatedPostId = "";
-                this.fetchFeed(); // Обновить ленту
-                this.switchView('feed'); // Вернуться в ленту если мы не там
+                this.newPost.content = "";
+                this.tagsString = "";
+                this.newPost.relatedPostId = "";
+                this.newPost.publicAnalysis = false;
+                await this.fetchFeed();
+                this.switchView('feed');
             } catch(e) { alert(e.message); }
         },
         async toggleLike(id) {
             await fetch(`${API_URL}/posts/${id}/like`, { method: "POST", headers: this.getHeaders() });
-            this.fetchFeed(); this.fetchUserProfile();
+            await this.fetchFeed();
         },
 
         switchView(view) {
             this.currentView = view;
         },
 
-        // --- GRAPH LOGIC (Pulse Map) ---
         async initGraph() {
+            const container = document.getElementById("graph-container");
+            if (!container) return;
 
-            const container = document.getElementById("graph-container")
-
-            if (!container) return
+            this.graphLoading = true;
 
             try {
-
                 const res = await fetch(`${API_URL}/users/${this.userId}/graph`, {
                     headers: this.getHeaders()
-                })
+                });
 
-                const graphData = await res.json()
+                if (!res.ok) throw new Error("Ошибка загрузки графа");
 
-                console.log("GRAPH DATA:", graphData)
+                const graphData = await res.json();
+                this.graphNodes = graphData.nodes;
+                this.graphLinks = graphData.links;
 
-                container.innerHTML = ""
+                this.graphNodes.forEach(node => {
+                    node.val = node.val || 1;
+                    node.color = this.getNodeColor(node.group);
+                });
+
+                container.innerHTML = "";
 
                 this.graphInstance = ForceGraph()(container)
-                    .graphData(graphData)
+                    .graphData({ nodes: this.graphNodes, links: this.graphLinks })
                     .backgroundColor("#0f172a")
-
                     .nodeLabel("name")
-
                     .nodeVal("val")
-
-                    .nodeColor(() => "#818cf8")
-
-                    .linkColor(() => "rgba(255,255,255,0.2)")
-
-                    .linkWidth(1)
-
-                    .d3Force("charge").strength(-120)
-
-                    .d3Force("link").distance(150)
-
+                    .nodeColor(node => node.color || "#818cf8")
+                    .nodeRelSize(6)
+                    .linkColor(() => "rgba(255,255,255,0.15)")
+                    .linkWidth(1.5)
+                    .linkDirectionalParticles(1)
+                    .linkDirectionalParticleWidth(2)
+                    .linkDirectionalParticleColor(() => "#ec4899")
+                    .linkDirectionalParticleSpeed(0.005)
                     .onNodeClick(node => {
-
-                        this.selectedNode = node
-
-                        this.graphInstance.centerAt(node.x, node.y, 1000)
-
-                        this.graphInstance.zoom(4, 2000)
-
+                        this.selectedGraphNode = node;
+                        this.highlightConnections(node);
                     })
+                    .onNodeDragEnd(node => {
+                        node.fx = node.x;
+                        node.fy = node.y;
+                    })
+                    .onBackgroundClick(() => {
+                        this.selectedGraphNode = null;
+                        this.resetHighlights();
+                    });
+
+                setTimeout(() => {
+                    if (this.graphInstance) {
+                        this.graphInstance.d3Force('charge').strength(-300);
+                        this.graphInstance.d3Force('link').distance(150);
+                    }
+                }, 100);
 
             } catch (e) {
+                console.error("GRAPH ERROR:", e);
+                container.innerHTML = `
+                    <div class="flex items-center justify-center h-full">
+                        <div class="text-center">
+                            <p class="text-red-400 mb-2">Ошибка загрузки графа</p>
+                            <p class="text-slate-400 text-sm">${e.message}</p>
+                        </div>
+                    </div>
+                `;
+            } finally {
+                this.graphLoading = false;
+            }
+        },
 
-                console.error("GRAPH ERROR:", e)
+        getNodeColor(group) {
+            const colors = {
+                'tech': '#6366f1',
+                'life': '#ec4899',
+                'work': '#10b981',
+                'idea': '#f59e0b',
+                'question': '#8b5cf6',
+                'general': '#64748b'
+            };
+            return colors[group] || `hsl(${this.hashCode(group) % 360}, 70%, 60%)`;
+        },
 
-                container.innerHTML = "<p style='color:red'>Ошибка загрузки графа</p>"
+        hashCode(str) {
+            let hash = 0;
+            for (let i = 0; i < str.length; i++) {
+                hash = ((hash << 5) - hash) + str.charCodeAt(i);
+                hash = hash & hash;
+            }
+            return Math.abs(hash);
+        },
+
+        highlightConnections(node) {
+            if (!this.graphInstance) return;
+
+            const connectedNodes = new Set();
+            connectedNodes.add(node.id);
+
+            this.graphLinks.forEach(link => {
+                const sourceId = typeof link.source === 'object' ? link.source.id : link.source;
+                const targetId = typeof link.target === 'object' ? link.target.id : link.target;
+                if (sourceId === node.id) connectedNodes.add(targetId);
+                if (targetId === node.id) connectedNodes.add(sourceId);
+            });
+
+            this.graphInstance
+                .nodeColor(n => {
+                    if (n.id === node.id) return "#ec4899";
+                    if (connectedNodes.has(n.id)) return "#818cf8";
+                    return "rgba(100,100,100,0.3)";
+                })
+                .linkColor(link => {
+                    const sourceId = typeof link.source === 'object' ? link.source.id : link.source;
+                    const targetId = typeof link.target === 'object' ? link.target.id : link.target;
+                    if (sourceId === node.id || targetId === node.id) {
+                        return "#ec4899";
+                    }
+                    return "rgba(255,255,255,0.05)";
+                })
+                .linkWidth(link => {
+                    const sourceId = typeof link.source === 'object' ? link.source.id : link.source;
+                    const targetId = typeof link.target === 'object' ? link.target.id : link.target;
+                    if (sourceId === node.id || targetId === node.id) {
+                        return 3;
+                    }
+                    return 1;
+                });
+        },
+
+        resetHighlights() {
+            if (!this.graphInstance) return;
+
+            this.graphInstance
+                .nodeColor(node => node.color || "#818cf8")
+                .linkColor(() => "rgba(255,255,255,0.15)")
+                .linkWidth(1.5);
+        },
+
+        resetGraphView() {
+            if (!this.graphInstance) return;
+
+            this.selectedGraphNode = null;
+            this.resetHighlights();
+            this.graphInstance.zoomToFit(400, 50);
+        },
+
+        async refreshGraph() {
+            await this.initGraph();
+        },
+
+        focusOnNode(node) {
+            if (!this.graphInstance || !node) return;
+
+            this.graphInstance.centerAt(node.x, node.y, 1000);
+            this.graphInstance.zoom(3, 1000);
+            this.highlightConnections(node);
+        },
+
+        getPostContent(postId) {
+            const post = this.userPosts.find(p => p.id === postId);
+            return post ? post.content : "Загрузка...";
+        },
+
+        getPostTags(postId) {
+            const post = this.userPosts.find(p => p.id === postId);
+            return post ? post.tags : [];
+        },
+
+        getConnectedNodesCount(nodeId) {
+            if (!this.graphLinks.length) return 0;
+            let count = 0;
+            this.graphLinks.forEach(link => {
+                const sourceId = typeof link.source === 'object' ? link.source.id : link.source;
+                const targetId = typeof link.target === 'object' ? link.target.id : link.target;
+                if (sourceId === nodeId || targetId === nodeId) count++;
+            });
+            return count;
+        },
+
+        async togglePostPublic(postId) {
+            try {
+                const res = await fetch(`${API_URL}/posts/${postId}/toggle_public`, {
+                    method: "POST",
+                    headers: this.getHeaders()
+                });
+                if (!res.ok) throw new Error("Ошибка переключения");
+                await this.fetchFeed();
+                if (this.currentView === 'community') {
+                    this.fetchCommunityRecommendations();
+                }
+            } catch (e) {
+                console.error(e);
+                alert("Не удалось изменить настройку публичности");
+            }
+        },
+
+        async fetchCommunityRecommendations() {
+            this.communityLoading = true;
+            try {
+                const res = await fetch(`${API_URL}/community/recommendations`, {
+                    headers: this.getHeaders()
+                });
+                if (!res.ok) throw new Error("Ошибка загрузки рекомендаций");
+                this.communityUsers = await res.json();
+            } catch (e) {
+                console.error(e);
+                this.communityUsers = [];
+            } finally {
+                this.communityLoading = false;
             }
         }
     }
 }).mount("#app");
 </script>
-
-<style>
-    /* Простые анимации для UI */
-    @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
-    .animate-fade-in { animation: fade-in 0.5s ease-out; }
-
-    @keyframes slide-up { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-    .animate-slide-up { animation: slide-up 0.3s ease-out; }
-</style>
 
 </body>
 </html>
