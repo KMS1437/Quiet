@@ -5,9 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Pulse: Neural Network Social</title>
 
-    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Force Graph Library -->
     <script src="https://unpkg.com/force-graph"></script>
 
     <script>
@@ -73,7 +71,6 @@
         .line-clamp-4 { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
     </style>
 
-    <!-- Vue 3 -->
     <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
 </head>
 
@@ -116,10 +113,12 @@
 
         <main class="flex-grow p-4 sm:p-6">
 
+            <!-- Загрузка -->
             <div v-if="!isReady || loading" class="flex justify-center items-center h-64">
                 <div class="w-12 h-12 border-4 border-pulse-accent border-t-transparent rounded-full animate-spin"></div>
             </div>
 
+            <!-- Авторизация -->
             <div v-else-if="!authToken" class="flex justify-center items-center min-h-[60vh]">
                 <div class="glass-panel p-8 rounded-3xl shadow-2xl w-full max-w-md border-t border-white/10">
                     <h2 class="text-3xl font-bold mb-2 text-center text-white">Добро пожаловать</h2>
@@ -150,6 +149,7 @@
                 </div>
             </div>
 
+            <!-- Граф -->
             <div v-else-if="currentView === 'graph'" class="animate-fade-in h-full">
                 <div class="glass-panel rounded-2xl h-[calc(100vh-120px)] relative overflow-hidden flex flex-col">
                     <div class="p-4 border-b border-slate-700/50 flex items-center justify-between flex-wrap gap-3">
@@ -255,6 +255,7 @@
                 </div>
             </div>
 
+            <!-- Лента -->
             <div v-else-if="currentView === 'feed'" class="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fade-in">
                 <div class="lg:col-span-1 space-y-6">
                     <div class="glass-panel p-5 rounded-2xl sticky top-24">
@@ -342,6 +343,7 @@
                 </div>
             </div>
 
+            <!-- Сообщества -->
             <div v-else-if="currentView === 'community'" class="animate-fade-in">
                 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     <div class="lg:col-span-1">
@@ -399,7 +401,7 @@
                             <div v-else class="space-y-3">
                                 <div v-for="user in communityUsers" :key="user.user_id" class="p-4 rounded-xl bg-slate-800/40 border border-slate-700/50 hover:border-emerald-500/30 transition-all">
                                     <div class="flex items-start gap-4">
-                                        <div class="w-12 h-12 rounded-full bg-gradient-to-br from-emerald-600 to-teal-700 flex items-center justify-center text-white font-bold text-lg shadow-lg">
+                                        <div class="w-12 h-12 rounded-full bg-gradient-to-br from-emerald-600 to-teal-700 flex items-center justify-center text-white font-bold text-lg">
                                             {{ user.user_id.substring(0,2).toUpperCase() }}
                                         </div>
                                         <div class="flex-1">
@@ -420,7 +422,27 @@
                                                 Публичных заметок: {{ user.public_posts_count }}
                                             </div>
                                         </div>
+                                        <button @click="openChat(user.user_id)" class="self-center bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm transition-all flex items-center gap-1">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path></svg>
+                                            Чат
+                                        </button>
                                     </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Активные чаты -->
+                        <div v-if="activeChats.length" class="glass-panel p-5 rounded-2xl">
+                            <h3 class="text-sm font-bold text-slate-400 uppercase tracking-wider mb-3">Открытые чаты</h3>
+                            <div class="space-y-2">
+                                <div v-for="chat in activeChats" :key="chat.user_id" @click="openChat(chat.user_id)" class="flex items-center justify-between p-3 rounded-lg bg-slate-800/40 border border-slate-700/50 cursor-pointer hover:border-pulse-accent/50">
+                                    <div class="flex items-center gap-3">
+                                        <div class="w-8 h-8 rounded-full bg-gradient-to-br from-pulse-accent to-neon-pink flex items-center justify-center text-white text-xs font-bold">
+                                            {{ chat.user_id.substring(0,2).toUpperCase() }}
+                                        </div>
+                                        <span class="text-sm text-slate-200 font-mono">{{ chat.user_id.substring(0,8) }}...</span>
+                                    </div>
+                                    <span class="text-xs text-slate-400">Открыть</span>
                                 </div>
                             </div>
                         </div>
@@ -428,410 +450,512 @@
                 </div>
             </div>
         </main>
-    </div>
 
-<script>
-const { createApp } = Vue;
-const API_URL = "http://127.0.0.1:8000";
-
-createApp({
-    data() {
-        return {
-            authToken: null,
-            userId: null,
-            isReady: false,
-            loading: false,
-            isRegistering: false,
-            currentView: 'feed',
-
-            posts: [],
-            userPosts: [],
-            userProfile: { preferred_tags: {} },
-
-            newPost: {
-                content: "",
-                relatedPostId: "",
-                publicAnalysis: false
-            },
-            tagsString: "",
-            auth: { email: "", password: "", loading: false, error: "" },
-
-            graphInstance: null,
-            graphNodes: [],
-            graphLinks: [],
-            selectedGraphNode: null,
-            graphLoading: false,
-
-            communityUsers: [],
-            communityLoading: false,
-        };
-    },
-
-    mounted() {
-        this.loadState();
-        if (this.authToken) {
-            this.initApp();
-        } else {
-            this.isReady = true;
-        }
-    },
-
-    watch: {
-        currentView(newVal) {
-            if (newVal === 'graph') {
-                this.$nextTick(() => this.initGraph());
-            }
-            if (newVal === 'community') {
-                this.fetchCommunityRecommendations();
-            }
-        }
-    },
-
-    computed: {
-        postTags() {
-            return this.tagsString.split(",").map(t => t.trim().toLowerCase()).filter(t => t.length > 0);
-        }
-    },
-
-    methods: {
-        async initApp() {
-            this.loading = true;
-            try {
-                await this.fetchFeed();
-                this.currentView = 'feed';
-            } catch (e) {
-                console.error("Ошибка инициализации:", e);
-            } finally {
-                this.isReady = true;
-                this.loading = false;
-            }
-        },
-
-        formatDate(ts) {
-            let date = new Date(ts);
-            return isNaN(date) ? ts : date.toLocaleDateString('ru-RU', {day:'numeric', month:'short', hour:'2-digit', minute:'2-digit'});
-        },
-
-        saveState() {
-            if (this.authToken) {
-                localStorage.setItem('pulse_token', this.authToken);
-                localStorage.setItem('pulse_uid', this.userId);
-            } else {
-                localStorage.clear();
-            }
-        },
-        loadState() {
-            this.authToken = localStorage.getItem('pulse_token');
-            this.userId = localStorage.getItem('pulse_uid');
-        },
-        getHeaders(auth = true) {
-            const h = { "Content-Type": "application/json" };
-            if (auth && this.authToken) h["Authorization"] = `Bearer ${this.authToken}`;
-            return h;
-        },
-
-        async authAction(endpoint) {
-            this.auth.loading = true;
-            this.auth.error = "";
-            try {
-                const res = await fetch(`${API_URL}/${endpoint}`, {
-                    method: "POST", headers: this.getHeaders(false),
-                    body: JSON.stringify(this.auth)
-                });
-                if (!res.ok) throw new Error((await res.json()).detail);
-                const data = await res.json();
-                this.authToken = data.token;
-                this.userId = data.user_id;
-                this.saveState();
-                this.initApp();
-            } catch (e) {
-                this.auth.error = e.message;
-            } finally {
-                this.auth.loading = false;
-            }
-        },
-        login() { this.authAction('login'); },
-        register() { this.authAction('register'); },
-        logout() {
-            this.authToken = null;
-            this.saveState();
-            this.currentView = 'login';
-            this.posts = [];
-            this.userPosts = [];
-        },
-
-        async fetchFeed() {
-            try {
-                const res = await fetch(`${API_URL}/posts`, { headers: this.getHeaders() });
-                if (res.status === 401) return this.logout();
-                if (!res.ok) return;
-                this.posts = await res.json();
-                this.posts = this.posts.map(p => ({
-                    ...p,
-                    hasLiked: p.likes.includes(this.userId)
-                }));
-                if(this.userId && Array.isArray(this.posts)) {
-                    this.userPosts = this.posts.filter(p => p.author_id === this.userId);
-                }
-                this.updateUserProfileFromPosts();
-            } catch(e) { console.error(e); }
-        },
-
-        updateUserProfileFromPosts() {
-            const tagScores = {};
-            this.userPosts.forEach(post => {
-                post.tags.forEach(tag => {
-                    tagScores[tag] = (tagScores[tag] || 0) + 1;
-                });
-            });
-            this.userProfile.preferred_tags = tagScores;
-        },
-
-        async createPost() {
-            if (!this.newPost.content.trim()) return;
-            try {
-                const res = await fetch(`${API_URL}/posts/create`, {
-                    method: "POST", headers: this.getHeaders(),
-                    body: JSON.stringify({
-                        content: this.newPost.content,
-                        tags: this.postTags,
-                        related_post_id: this.newPost.relatedPostId || null,
-                        public_analysis: this.newPost.publicAnalysis
-                    })
-                });
-                if(!res.ok) throw new Error("Ошибка");
-                this.newPost.content = "";
-                this.tagsString = "";
-                this.newPost.relatedPostId = "";
-                this.newPost.publicAnalysis = false;
-                await this.fetchFeed();
-                this.switchView('feed');
-            } catch(e) { alert(e.message); }
-        },
-        async toggleLike(id) {
-            await fetch(`${API_URL}/posts/${id}/like`, { method: "POST", headers: this.getHeaders() });
-            await this.fetchFeed();
-        },
-
-        switchView(view) {
-            this.currentView = view;
-        },
-
-        async initGraph() {
-            const container = document.getElementById("graph-container");
-            if (!container) return;
-
-            this.graphLoading = true;
-
-            try {
-                const res = await fetch(`${API_URL}/users/${this.userId}/graph`, {
-                    headers: this.getHeaders()
-                });
-
-                if (!res.ok) throw new Error("Ошибка загрузки графа");
-
-                const graphData = await res.json();
-                this.graphNodes = graphData.nodes;
-                this.graphLinks = graphData.links;
-
-                this.graphNodes.forEach(node => {
-                    node.val = node.val || 1;
-                    node.color = this.getNodeColor(node.group);
-                });
-
-                container.innerHTML = "";
-
-                this.graphInstance = ForceGraph()(container)
-                    .graphData({ nodes: this.graphNodes, links: this.graphLinks })
-                    .backgroundColor("#0f172a")
-                    .nodeLabel("name")
-                    .nodeVal("val")
-                    .nodeColor(node => node.color || "#818cf8")
-                    .nodeRelSize(6)
-                    .linkColor(() => "rgba(255,255,255,0.15)")
-                    .linkWidth(1.5)
-                    .linkDirectionalParticles(1)
-                    .linkDirectionalParticleWidth(2)
-                    .linkDirectionalParticleColor(() => "#ec4899")
-                    .linkDirectionalParticleSpeed(0.005)
-                    .onNodeClick(node => {
-                        this.selectedGraphNode = node;
-                        this.highlightConnections(node);
-                    })
-                    .onNodeDragEnd(node => {
-                        node.fx = node.x;
-                        node.fy = node.y;
-                    })
-                    .onBackgroundClick(() => {
-                        this.selectedGraphNode = null;
-                        this.resetHighlights();
-                    });
-
-                setTimeout(() => {
-                    if (this.graphInstance) {
-                        this.graphInstance.d3Force('charge').strength(-300);
-                        this.graphInstance.d3Force('link').distance(150);
-                    }
-                }, 100);
-
-            } catch (e) {
-                console.error("GRAPH ERROR:", e);
-                container.innerHTML = `
-                    <div class="flex items-center justify-center h-full">
-                        <div class="text-center">
-                            <p class="text-red-400 mb-2">Ошибка загрузки графа</p>
-                            <p class="text-slate-400 text-sm">${e.message}</p>
+        <!-- Модальное окно чата -->
+        <div v-if="chatOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" @click.self="closeChat">
+            <div class="glass-panel w-full max-w-2xl h-[600px] flex flex-col rounded-2xl border border-slate-700 shadow-2xl animate-slide-up">
+                <div class="flex items-center justify-between p-4 border-b border-slate-700/50">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-600 to-teal-700 flex items-center justify-center text-white font-bold">
+                            {{ chatPartnerId.substring(0,2).toUpperCase() }}
+                        </div>
+                        <div>
+                            <h3 class="font-bold text-white">Чат с {{ chatPartnerId.substring(0,8) }}...</h3>
+                            <span class="text-xs text-slate-400 font-mono">{{ chatPartnerId }}</span>
                         </div>
                     </div>
-                `;
-            } finally {
-                this.graphLoading = false;
-            }
-        },
+                    <button @click="closeChat" class="text-slate-400 hover:text-white p-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                </div>
 
-        getNodeColor(group) {
-            const colors = {
-                'tech': '#6366f1',
-                'life': '#ec4899',
-                'work': '#10b981',
-                'idea': '#f59e0b',
-                'question': '#8b5cf6',
-                'general': '#64748b'
-            };
-            return colors[group] || `hsl(${this.hashCode(group) % 360}, 70%, 60%)`;
-        },
+                <div ref="chatMessages" class="flex-1 overflow-y-auto p-4 space-y-3 custom-scroll">
+                    <div v-if="chatMessages.length === 0" class="text-center text-slate-500 mt-20">Нет сообщений. Начните беседу!</div>
+                    <div v-for="msg in chatMessages" :key="msg.id" class="flex" :class="msg.sender_id === userId ? 'justify-end' : 'justify-start'">
+                        <div class="max-w-[75%] rounded-xl p-3" :class="msg.sender_id === userId ? 'bg-pulse-accent text-white' : 'bg-slate-700 text-slate-200'">
+                            <p class="text-sm">{{ msg.content }}</p>
+                            <span class="text-[10px] opacity-70 block mt-1">{{ new Date(msg.timestamp).toLocaleTimeString('ru-RU', {hour:'2-digit', minute:'2-digit'}) }}</span>
+                        </div>
+                    </div>
+                </div>
 
-        hashCode(str) {
-            let hash = 0;
-            for (let i = 0; i < str.length; i++) {
-                hash = ((hash << 5) - hash) + str.charCodeAt(i);
-                hash = hash & hash;
-            }
-            return Math.abs(hash);
-        },
+                <div class="p-4 border-t border-slate-700/50 flex gap-3">
+                    <input v-model="newChatMessage" @keyup.enter="sendMessage" class="input flex-1" placeholder="Введите сообщение..." />
+                    <button @click="sendMessage" :disabled="!newChatMessage.trim()" class="bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 text-white px-6 py-3 rounded-xl font-semibold transition">
+                        Отправить
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
 
-        highlightConnections(node) {
-            if (!this.graphInstance) return;
+    <script>
+        const { createApp } = Vue;
+        const API_URL = "http://127.0.0.1:8000";
 
-            const connectedNodes = new Set();
-            connectedNodes.add(node.id);
+        createApp({
+            data() {
+                return {
+                    authToken: null,
+                    userId: null,
+                    isReady: false,
+                    loading: false,
+                    isRegistering: false,
+                    currentView: 'feed',
 
-            this.graphLinks.forEach(link => {
-                const sourceId = typeof link.source === 'object' ? link.source.id : link.source;
-                const targetId = typeof link.target === 'object' ? link.target.id : link.target;
-                if (sourceId === node.id) connectedNodes.add(targetId);
-                if (targetId === node.id) connectedNodes.add(sourceId);
-            });
+                    posts: [],
+                    userPosts: [],
+                    userProfile: { preferred_tags: {} },
 
-            this.graphInstance
-                .nodeColor(n => {
-                    if (n.id === node.id) return "#ec4899";
-                    if (connectedNodes.has(n.id)) return "#818cf8";
-                    return "rgba(100,100,100,0.3)";
-                })
-                .linkColor(link => {
-                    const sourceId = typeof link.source === 'object' ? link.source.id : link.source;
-                    const targetId = typeof link.target === 'object' ? link.target.id : link.target;
-                    if (sourceId === node.id || targetId === node.id) {
-                        return "#ec4899";
-                    }
-                    return "rgba(255,255,255,0.05)";
-                })
-                .linkWidth(link => {
-                    const sourceId = typeof link.source === 'object' ? link.source.id : link.source;
-                    const targetId = typeof link.target === 'object' ? link.target.id : link.target;
-                    if (sourceId === node.id || targetId === node.id) {
-                        return 3;
-                    }
-                    return 1;
-                });
-        },
+                    newPost: {
+                        content: "",
+                        relatedPostId: "",
+                        publicAnalysis: false
+                    },
+                    tagsString: "",
+                    auth: { email: "", password: "", loading: false, error: "" },
 
-        resetHighlights() {
-            if (!this.graphInstance) return;
+                    // Граф
+                    graphInstance: null,
+                    graphNodes: [],
+                    graphLinks: [],
+                    selectedGraphNode: null,
+                    graphLoading: false,
 
-            this.graphInstance
-                .nodeColor(node => node.color || "#818cf8")
-                .linkColor(() => "rgba(255,255,255,0.15)")
-                .linkWidth(1.5);
-        },
+                    // Сообщества
+                    communityUsers: [],
+                    communityLoading: false,
 
-        resetGraphView() {
-            if (!this.graphInstance) return;
+                    // Чат
+                    chatOpen: false,
+                    chatPartnerId: null,
+                    chatMessages: [],
+                    newChatMessage: "",
+                    chatSocket: null,
+                    activeChats: [],
+                };
+            },
 
-            this.selectedGraphNode = null;
-            this.resetHighlights();
-            this.graphInstance.zoomToFit(400, 50);
-        },
-
-        async refreshGraph() {
-            await this.initGraph();
-        },
-
-        focusOnNode(node) {
-            if (!this.graphInstance || !node) return;
-
-            this.graphInstance.centerAt(node.x, node.y, 1000);
-            this.graphInstance.zoom(3, 1000);
-            this.highlightConnections(node);
-        },
-
-        getPostContent(postId) {
-            const post = this.userPosts.find(p => p.id === postId);
-            return post ? post.content : "Загрузка...";
-        },
-
-        getPostTags(postId) {
-            const post = this.userPosts.find(p => p.id === postId);
-            return post ? post.tags : [];
-        },
-
-        getConnectedNodesCount(nodeId) {
-            if (!this.graphLinks.length) return 0;
-            let count = 0;
-            this.graphLinks.forEach(link => {
-                const sourceId = typeof link.source === 'object' ? link.source.id : link.source;
-                const targetId = typeof link.target === 'object' ? link.target.id : link.target;
-                if (sourceId === nodeId || targetId === nodeId) count++;
-            });
-            return count;
-        },
-
-        async togglePostPublic(postId) {
-            try {
-                const res = await fetch(`${API_URL}/posts/${postId}/toggle_public`, {
-                    method: "POST",
-                    headers: this.getHeaders()
-                });
-                if (!res.ok) throw new Error("Ошибка переключения");
-                await this.fetchFeed();
-                if (this.currentView === 'community') {
-                    this.fetchCommunityRecommendations();
+            mounted() {
+                this.loadState();
+                if (this.authToken) {
+                    this.initApp();
+                } else {
+                    this.isReady = true;
                 }
-            } catch (e) {
-                console.error(e);
-                alert("Не удалось изменить настройку публичности");
-            }
-        },
+            },
 
-        async fetchCommunityRecommendations() {
-            this.communityLoading = true;
-            try {
-                const res = await fetch(`${API_URL}/community/recommendations`, {
-                    headers: this.getHeaders()
-                });
-                if (!res.ok) throw new Error("Ошибка загрузки рекомендаций");
-                this.communityUsers = await res.json();
-            } catch (e) {
-                console.error(e);
-                this.communityUsers = [];
-            } finally {
-                this.communityLoading = false;
+            watch: {
+                currentView(newVal) {
+                    if (newVal === 'graph') {
+                        this.$nextTick(() => this.initGraph());
+                    }
+                    if (newVal === 'community') {
+                        this.fetchCommunityRecommendations();
+                    }
+                }
+            },
+
+            computed: {
+                postTags() {
+                    return this.tagsString.split(",").map(t => t.trim().toLowerCase()).filter(t => t.length > 0);
+                }
+            },
+
+            methods: {
+                async initApp() {
+                    this.loading = true;
+                    try {
+                        await this.fetchFeed();
+                        this.currentView = 'feed';
+                    } catch (e) {
+                        console.error("Ошибка инициализации:", e);
+                    } finally {
+                        this.isReady = true;
+                        this.loading = false;
+                    }
+                },
+
+                formatDate(ts) {
+                    let date = new Date(ts);
+                    return isNaN(date) ? ts : date.toLocaleDateString('ru-RU', {day:'numeric', month:'short', hour:'2-digit', minute:'2-digit'});
+                },
+
+                saveState() {
+                    if (this.authToken) {
+                        localStorage.setItem('pulse_token', this.authToken);
+                        localStorage.setItem('pulse_uid', this.userId);
+                    } else {
+                        localStorage.clear();
+                    }
+                },
+                loadState() {
+                    this.authToken = localStorage.getItem('pulse_token');
+                    this.userId = localStorage.getItem('pulse_uid');
+                },
+                getHeaders(auth = true) {
+                    const h = { "Content-Type": "application/json" };
+                    if (auth && this.authToken) h["Authorization"] = `Bearer ${this.authToken}`;
+                    return h;
+                },
+
+                async authAction(endpoint) {
+                    this.auth.loading = true;
+                    this.auth.error = "";
+                    try {
+                        const res = await fetch(`${API_URL}/${endpoint}`, {
+                            method: "POST", headers: this.getHeaders(false),
+                            body: JSON.stringify(this.auth)
+                        });
+                        if (!res.ok) throw new Error((await res.json()).detail);
+                        const data = await res.json();
+                        this.authToken = data.token;
+                        this.userId = data.user_id;
+                        this.saveState();
+                        this.initApp();
+                    } catch (e) {
+                        this.auth.error = e.message;
+                    } finally {
+                        this.auth.loading = false;
+                    }
+                },
+                login() { this.authAction('login'); },
+                register() { this.authAction('register'); },
+                logout() {
+                    this.authToken = null;
+                    this.saveState();
+                    this.currentView = 'login';
+                    this.posts = [];
+                    this.userPosts = [];
+                },
+
+                async fetchFeed() {
+                    try {
+                        const res = await fetch(`${API_URL}/posts`, { headers: this.getHeaders() });
+                        if (res.status === 401) return this.logout();
+                        if (!res.ok) return;
+                        this.posts = await res.json();
+                        this.posts = this.posts.map(p => ({
+                            ...p,
+                            hasLiked: p.likes.includes(this.userId)
+                        }));
+                        if(this.userId && Array.isArray(this.posts)) {
+                            this.userPosts = this.posts.filter(p => p.author_id === this.userId);
+                        }
+                        this.updateUserProfileFromPosts();
+                    } catch(e) { console.error(e); }
+                },
+
+                updateUserProfileFromPosts() {
+                    const tagScores = {};
+                    this.userPosts.forEach(post => {
+                        post.tags.forEach(tag => {
+                            tagScores[tag] = (tagScores[tag] || 0) + 1;
+                        });
+                    });
+                    this.userProfile.preferred_tags = tagScores;
+                },
+
+                async createPost() {
+                    if (!this.newPost.content.trim()) return;
+                    try {
+                        const res = await fetch(`${API_URL}/posts/create`, {
+                            method: "POST", headers: this.getHeaders(),
+                            body: JSON.stringify({
+                                content: this.newPost.content,
+                                tags: this.postTags,
+                                related_post_id: this.newPost.relatedPostId || null,
+                                public_analysis: this.newPost.publicAnalysis
+                            })
+                        });
+                        if(!res.ok) throw new Error("Ошибка");
+                        this.newPost.content = "";
+                        this.tagsString = "";
+                        this.newPost.relatedPostId = "";
+                        this.newPost.publicAnalysis = false;
+                        await this.fetchFeed();
+                        this.switchView('feed');
+                    } catch(e) { alert(e.message); }
+                },
+                async toggleLike(id) {
+                    await fetch(`${API_URL}/posts/${id}/like`, { method: "POST", headers: this.getHeaders() });
+                    await this.fetchFeed();
+                },
+
+                switchView(view) {
+                    this.currentView = view;
+                },
+
+                // ---------- ГРАФ ----------
+                async initGraph() {
+                    const container = document.getElementById("graph-container");
+                    if (!container) return;
+
+                    this.graphLoading = true;
+
+                    try {
+                        const res = await fetch(`${API_URL}/users/${this.userId}/graph`, {
+                            headers: this.getHeaders()
+                        });
+
+                        if (!res.ok) throw new Error("Ошибка загрузки графа");
+
+                        const graphData = await res.json();
+                        this.graphNodes = graphData.nodes;
+                        this.graphLinks = graphData.links;
+
+                        this.graphNodes.forEach(node => {
+                            node.val = node.val || 1;
+                            node.color = this.getNodeColor(node.group);
+                        });
+
+                        container.innerHTML = "";
+
+                        this.graphInstance = ForceGraph()(container)
+                            .graphData({ nodes: this.graphNodes, links: this.graphLinks })
+                            .backgroundColor("#0f172a")
+                            .nodeLabel("name")
+                            .nodeVal("val")
+                            .nodeColor(node => node.color || "#818cf8")
+                            .nodeRelSize(6)
+                            .linkColor(() => "rgba(255,255,255,0.15)")
+                            .linkWidth(1.5)
+                            .linkDirectionalParticles(1)
+                            .linkDirectionalParticleWidth(2)
+                            .linkDirectionalParticleColor(() => "#ec4899")
+                            .linkDirectionalParticleSpeed(0.005)
+                            .onNodeClick(node => {
+                                this.selectedGraphNode = node;
+                                this.highlightConnections(node);
+                            })
+                            .onNodeDragEnd(node => {
+                                node.fx = node.x;
+                                node.fy = node.y;
+                            })
+                            .onBackgroundClick(() => {
+                                this.selectedGraphNode = null;
+                                this.resetHighlights();
+                            });
+
+                        setTimeout(() => {
+                            if (this.graphInstance) {
+                                this.graphInstance.d3Force('charge').strength(-300);
+                                this.graphInstance.d3Force('link').distance(150);
+                            }
+                        }, 100);
+
+                    } catch (e) {
+                        console.error("GRAPH ERROR:", e);
+                        container.innerHTML = `
+                            <div class="flex items-center justify-center h-full">
+                                <div class="text-center">
+                                    <p class="text-red-400 mb-2">Ошибка загрузки графа</p>
+                                    <p class="text-slate-400 text-sm">${e.message}</p>
+                                </div>
+                            </div>
+                        `;
+                    } finally {
+                        this.graphLoading = false;
+                    }
+                },
+
+                getNodeColor(group) {
+                    const colors = {
+                        'tech': '#6366f1',
+                        'life': '#ec4899',
+                        'work': '#10b981',
+                        'idea': '#f59e0b',
+                        'question': '#8b5cf6',
+                        'general': '#64748b'
+                    };
+                    return colors[group] || `hsl(${this.hashCode(group) % 360}, 70%, 60%)`;
+                },
+
+                hashCode(str) {
+                    let hash = 0;
+                    for (let i = 0; i < str.length; i++) {
+                        hash = ((hash << 5) - hash) + str.charCodeAt(i);
+                        hash = hash & hash;
+                    }
+                    return Math.abs(hash);
+                },
+
+                highlightConnections(node) {
+                    if (!this.graphInstance) return;
+
+                    const connectedNodes = new Set();
+                    connectedNodes.add(node.id);
+
+                    this.graphLinks.forEach(link => {
+                        const sourceId = typeof link.source === 'object' ? link.source.id : link.source;
+                        const targetId = typeof link.target === 'object' ? link.target.id : link.target;
+                        if (sourceId === node.id) connectedNodes.add(targetId);
+                        if (targetId === node.id) connectedNodes.add(sourceId);
+                    });
+
+                    this.graphInstance
+                        .nodeColor(n => {
+                            if (n.id === node.id) return "#ec4899";
+                            if (connectedNodes.has(n.id)) return "#818cf8";
+                            return "rgba(100,100,100,0.3)";
+                        })
+                        .linkColor(link => {
+                            const sourceId = typeof link.source === 'object' ? link.source.id : link.source;
+                            const targetId = typeof link.target === 'object' ? link.target.id : link.target;
+                            if (sourceId === node.id || targetId === node.id) {
+                                return "#ec4899";
+                            }
+                            return "rgba(255,255,255,0.05)";
+                        })
+                        .linkWidth(link => {
+                            const sourceId = typeof link.source === 'object' ? link.source.id : link.source;
+                            const targetId = typeof link.target === 'object' ? link.target.id : link.target;
+                            if (sourceId === node.id || targetId === node.id) {
+                                return 3;
+                            }
+                            return 1;
+                        });
+                },
+
+                resetHighlights() {
+                    if (!this.graphInstance) return;
+
+                    this.graphInstance
+                        .nodeColor(node => node.color || "#818cf8")
+                        .linkColor(() => "rgba(255,255,255,0.15)")
+                        .linkWidth(1.5);
+                },
+
+                resetGraphView() {
+                    if (!this.graphInstance) return;
+
+                    this.selectedGraphNode = null;
+                    this.resetHighlights();
+                    this.graphInstance.zoomToFit(400, 50);
+                },
+
+                async refreshGraph() {
+                    await this.initGraph();
+                },
+
+                focusOnNode(node) {
+                    if (!this.graphInstance || !node) return;
+
+                    this.graphInstance.centerAt(node.x, node.y, 1000);
+                    this.graphInstance.zoom(3, 1000);
+                    this.highlightConnections(node);
+                },
+
+                getPostContent(postId) {
+                    const post = this.userPosts.find(p => p.id === postId);
+                    return post ? post.content : "Загрузка...";
+                },
+
+                getPostTags(postId) {
+                    const post = this.userPosts.find(p => p.id === postId);
+                    return post ? post.tags : [];
+                },
+
+                getConnectedNodesCount(nodeId) {
+                    if (!this.graphLinks.length) return 0;
+                    let count = 0;
+                    this.graphLinks.forEach(link => {
+                        const sourceId = typeof link.source === 'object' ? link.source.id : link.source;
+                        const targetId = typeof link.target === 'object' ? link.target.id : link.target;
+                        if (sourceId === nodeId || targetId === nodeId) count++;
+                    });
+                    return count;
+                },
+
+                // ---------- СООБЩЕСТВА ----------
+                async togglePostPublic(postId) {
+                    try {
+                        const res = await fetch(`${API_URL}/posts/${postId}/toggle_public`, {
+                            method: "POST",
+                            headers: this.getHeaders()
+                        });
+                        if (!res.ok) throw new Error("Ошибка переключения");
+                        await this.fetchFeed();
+                        if (this.currentView === 'community') {
+                            this.fetchCommunityRecommendations();
+                        }
+                    } catch (e) {
+                        console.error(e);
+                        alert("Не удалось изменить настройку публичности");
+                    }
+                },
+
+                async fetchCommunityRecommendations() {
+                    this.communityLoading = true;
+                    try {
+                        const res = await fetch(`${API_URL}/community/recommendations`, {
+                            headers: this.getHeaders()
+                        });
+                        if (!res.ok) throw new Error("Ошибка загрузки рекомендаций");
+                        this.communityUsers = await res.json();
+                    } catch (e) {
+                        console.error(e);
+                        this.communityUsers = [];
+                    } finally {
+                        this.communityLoading = false;
+                    }
+                },
+
+                // ---------- ЧАТ ----------
+                async openChat(partnerId) {
+                    if (partnerId === this.userId) return;
+                    this.chatPartnerId = partnerId;
+                    this.chatMessages = [];
+                    this.newChatMessage = "";
+                    this.chatOpen = true;
+
+                    try {
+                        const res = await fetch(`${API_URL}/chat/messages/${partnerId}`, { headers: this.getHeaders() });
+                        if (res.ok) {
+                            this.chatMessages = await res.json();
+                        }
+                    } catch(e) { console.error(e); }
+
+                    if (this.chatSocket) this.chatSocket.close();
+                    const wsUrl = `ws://127.0.0.1:8000/ws/chat/${this.userId}?token=${this.authToken}`;
+                    this.chatSocket = new WebSocket(wsUrl);
+                    this.chatSocket.onmessage = (event) => {
+                        const msg = JSON.parse(event.data);
+                        if ((msg.sender_id === this.userId && msg.receiver_id === partnerId) ||
+                            (msg.sender_id === partnerId && msg.receiver_id === this.userId)) {
+                            this.chatMessages.push(msg);
+                            this.$nextTick(() => {
+                                const el = this.$refs.chatMessages;
+                                if (el) el.scrollTop = el.scrollHeight;
+                            });
+                        }
+                    };
+
+                    if (!this.activeChats.find(c => c.user_id === partnerId)) {
+                        this.activeChats.push({ user_id: partnerId });
+                    }
+                },
+
+                sendMessage() {
+                    const content = this.newChatMessage.trim();
+                    if (!content || !this.chatSocket || this.chatSocket.readyState !== WebSocket.OPEN) return;
+                    this.chatSocket.send(JSON.stringify({
+                        receiver_id: this.chatPartnerId,
+                        content: content
+                    }));
+                    this.newChatMessage = "";
+                },
+
+                closeChat() {
+                    this.chatOpen = false;
+                    if (this.chatSocket) {
+                        this.chatSocket.close();
+                        this.chatSocket = null;
+                    }
+                },
             }
-        }
-    }
-}).mount("#app");
-</script>
+        }).mount("#app");
+    </script>
 
 </body>
 </html>
