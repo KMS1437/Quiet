@@ -13,7 +13,7 @@ import math
 from sqlalchemy import create_engine, Column, String, ForeignKey, DateTime, Table, Text, Boolean
 from sqlalchemy.orm import declarative_base, sessionmaker, Session, relationship
 
-SQLALCHEMY_DATABASE_URL = "sqlite:///./pulse.db"
+SQLALCHEMY_DATABASE_URL = "sqlite:///./quiet.db"
 
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
@@ -207,7 +207,7 @@ def calculate_recommendations(all_posts: List[DBPost], preferred_tags: Dict[str,
 
 
 # ---------- FastAPI ----------
-app = FastAPI(title="Pulse API SQL + Chat")
+app = FastAPI(title="Quiet API SQL + Chat")
 
 origins = [
     "http://127.0.0.1",
@@ -248,7 +248,7 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> str:
 
 @app.get("/")
 def read_root():
-    return {"message": "Pulse API with SQL and WebSocket Chat is running."}
+    return {"message": "Quiet API with SQL and WebSocket Chat is running."}
 
 
 @app.post("/register", response_model=LoginResponse)
