@@ -1,7 +1,7 @@
-from fastapi import FastAPI, HTTPException, Depends, status, Request
+from fastapi import FastAPI, HTTPException, Depends, status, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, EmailStr, ConfigDict
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Set
 import time
 import uuid
 import hashlib
@@ -67,7 +67,6 @@ class DBPost(Base):
     timestamp = Column(DateTime)
     tags_json = Column(Text, default="[]")
     related_post_id = Column(String, nullable=True)
-    # НОВОЕ ПОЛЕ
     public_analysis = Column(Boolean, default=False)
 
     author = relationship("DBUser", back_populates="posts")
@@ -85,7 +84,16 @@ class DBToken(Base):
     user_id = Column(String, ForeignKey("users.id"))
 
 
-# Создаём таблицы (если поле public_analysis новое, SQLAlchemy добавит его автоматически при create_all)
+class DBChatMessage(Base):
+    __tablename__ = "chat_messages"
+
+    id = Column(String, primary_key=True)
+    sender_id = Column(String, ForeignKey("users.id"), index=True)
+    receiver_id = Column(String, ForeignKey("users.id"), index=True)
+    content = Column(Text)
+    timestamp = Column(DateTime)
+
+
 Base.metadata.create_all(bind=engine)
 
 
@@ -117,7 +125,7 @@ class PostIn(BaseModel):
     content: str
     tags: List[str]
     related_post_id: Optional[str] = None
-    public_analysis: bool = False  # новое поле
+    public_analysis: bool = False
 
 
 class PostOut(PostIn):
@@ -151,7 +159,6 @@ class GraphData(BaseModel):
     links: List[GraphLink]
 
 
-# Модель для рекомендаций сообщества
 class CommunityUser(BaseModel):
     user_id: str
     similarity: float
@@ -200,7 +207,7 @@ def calculate_recommendations(all_posts: List[DBPost], preferred_tags: Dict[str,
 
 
 # ---------- FastAPI ----------
-app = FastAPI(title="Pulse API SQL")
+app = FastAPI(title="Pulse API SQL + Chat")
 
 origins = [
     "http://127.0.0.1",
@@ -241,7 +248,7 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> str:
 
 @app.get("/")
 def read_root():
-    return {"message": "Pulse API with SQL is running."}
+    return {"message": "Pulse API with SQL and WebSocket Chat is running."}
 
 
 @app.post("/register", response_model=LoginResponse)
@@ -294,7 +301,7 @@ def create_post(post_data: PostIn, user_id: str = Depends(get_current_user), db:
         content=post_data.content,
         tags_json=json.dumps(processed_tags),
         related_post_id=post_data.related_post_id,
-        public_analysis=post_data.public_analysis  # новое поле
+        public_analysis=post_data.public_analysis
     )
     db.add(new_post)
     db.commit()
@@ -371,8 +378,7 @@ def get_user_graph(user_id: str, db: Session = Depends(get_db)):
     return GraphData(nodes=nodes, links=links)
 
 
-# ---------- НОВЫЕ ЭНДПОИНТЫ ДЛЯ СООБЩЕСТВ ----------
-
+# ---------- ЭНДПОИНТЫ СООБЩЕСТВ ----------
 @app.post("/posts/{post_id}/toggle_public")
 def toggle_post_public(post_id: str, user_id: str = Depends(get_current_user), db: Session = Depends(get_db)):
     post = db.query(DBPost).filter(DBPost.id == post_id, DBPost.author_id == user_id).first()
@@ -385,10 +391,8 @@ def toggle_post_public(post_id: str, user_id: str = Depends(get_current_user), d
 
 @app.get("/community/recommendations", response_model=List[CommunityUser])
 def get_community_recommendations(current_user_id: str = Depends(get_current_user), db: Session = Depends(get_db)):
-    # Получаем все публичные посты
     public_posts = db.query(DBPost).filter(DBPost.public_analysis == True).all()
 
-    # Строим векторы тегов для каждого пользователя (на основе публичных постов)
     user_tag_vectors = defaultdict(lambda: defaultdict(float))
     user_public_counts = defaultdict(int)
 
@@ -399,7 +403,6 @@ def get_community_recommendations(current_user_id: str = Depends(get_current_use
         for tag in tags:
             user_tag_vectors[uid][tag] += 1.0
 
-    # Нормализуем векторы (TF)
     for uid, vec in user_tag_vectors.items():
         norm = math.sqrt(sum(v * v for v in vec.values()))
         if norm > 0:
@@ -410,29 +413,25 @@ def get_community_recommendations(current_user_id: str = Depends(get_current_use
     if not current_vec:
         return []
 
-    # Вычисляем косинусное сходство с другими пользователями
     similarities = []
     for other_uid, other_vec in user_tag_vectors.items():
         if other_uid == current_user_id:
             continue
-        # Косинусное сходство
         dot = sum(current_vec.get(tag, 0) * val for tag, val in other_vec.items())
-        # Нормы уже 1, поэтому similarity = dot
         similarity = dot
-        # Общие теги (для отображения)
         common = [tag for tag in other_vec if tag in current_vec]
         common.sort(key=lambda t: other_vec[t], reverse=True)
         similarities.append({
             "user_id": other_uid,
             "similarity": similarity,
-            "common_tags": common[:5],  # топ-5 общих тегов
+            "common_tags": common[:5],
             "public_posts_count": user_public_counts[other_uid]
         })
 
-    # Сортируем по убыванию схожести
     similarities.sort(key=lambda x: x["similarity"], reverse=True)
-    # Возвращаем топ-20
     return similarities[:20]
+
+
 @app.get("/users/{user_id}")
 def get_user_profile(user_id: str, db: Session = Depends(get_db)):
     profile = db.query(DBProfile).filter(DBProfile.user_id == user_id).first()
@@ -444,3 +443,112 @@ def get_user_profile(user_id: str, db: Session = Depends(get_db)):
         "preferred_tags": json.loads(profile.preferred_tags_json or "{}"),
         "created_at": profile.created_at.isoformat()
     }
+
+
+# ---------- ЧАТ ----------
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: Dict[str, WebSocket] = {}
+
+    async def connect(self, user_id: str, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections[user_id] = websocket
+
+    def disconnect(self, user_id: str):
+        if user_id in self.active_connections:
+            del self.active_connections[user_id]
+
+    async def send_personal_message(self, message: dict, user_id: str):
+        ws = self.active_connections.get(user_id)
+        if ws:
+            await ws.send_json(message)
+
+    async def broadcast_message(self, message: dict, sender_id: str, receiver_id: str):
+        await self.send_personal_message(message, receiver_id)
+        await self.send_personal_message(message, sender_id)
+
+manager = ConnectionManager()
+
+
+@app.websocket("/ws/chat/{user_id}")
+async def websocket_chat(websocket: WebSocket, user_id: str, db: Session = Depends(get_db)):
+    token = websocket.query_params.get("token")
+    if not token:
+        await websocket.close(code=4001)
+        return
+    db_token = db.query(DBToken).filter(DBToken.token == token).first()
+    if not db_token or db_token.user_id != user_id:
+        await websocket.close(code=4002)
+        return
+
+    await manager.connect(user_id, websocket)
+    try:
+        while True:
+            data = await websocket.receive_json()
+            receiver_id = data.get("receiver_id")
+            content = data.get("content")
+            if not receiver_id or not content:
+                continue
+            msg_id = create_uuid()
+            msg = DBChatMessage(
+                id=msg_id,
+                sender_id=user_id,
+                receiver_id=receiver_id,
+                content=content,
+                timestamp=datetime.now(timezone.utc)
+            )
+            db.add(msg)
+            db.commit()
+            message_out = {
+                "id": msg_id,
+                "sender_id": user_id,
+                "receiver_id": receiver_id,
+                "content": content,
+                "timestamp": msg.timestamp.isoformat()
+            }
+            await manager.broadcast_message(message_out, user_id, receiver_id)
+    except WebSocketDisconnect:
+        manager.disconnect(user_id)
+
+
+@app.get("/chat/conversations")
+def get_conversations(user_id: str = Depends(get_current_user), db: Session = Depends(get_db)):
+    sent = db.query(DBChatMessage.receiver_id).filter(DBChatMessage.sender_id == user_id).distinct().all()
+    received = db.query(DBChatMessage.sender_id).filter(DBChatMessage.receiver_id == user_id).distinct().all()
+    all_ids = set([r[0] for r in sent] + [r[0] for r in received])
+    conversations = []
+    for other_id in all_ids:
+        last_msg = db.query(DBChatMessage).filter(
+            (DBChatMessage.sender_id == user_id) & (DBChatMessage.receiver_id == other_id) |
+            (DBChatMessage.sender_id == other_id) & (DBChatMessage.receiver_id == user_id)
+        ).order_by(DBChatMessage.timestamp.desc()).first()
+        conversations.append({
+            "user_id": other_id,
+            "last_message": last_msg.content if last_msg else "",
+            "timestamp": last_msg.timestamp.isoformat() if last_msg else None
+        })
+    return conversations
+
+
+@app.get("/chat/messages/{other_user_id}")
+def get_chat_history(other_user_id: str, user_id: str = Depends(get_current_user), db: Session = Depends(get_db)):
+    messages = db.query(DBChatMessage).filter(
+        (DBChatMessage.sender_id == user_id) & (DBChatMessage.receiver_id == other_user_id) |
+        (DBChatMessage.sender_id == other_user_id) & (DBChatMessage.receiver_id == user_id)
+    ).order_by(DBChatMessage.timestamp).all()
+    return [{
+        "id": m.id,
+        "sender_id": m.sender_id,
+        "receiver_id": m.receiver_id,
+        "content": m.content,
+        "timestamp": m.timestamp.isoformat()
+    } for m in messages]
+
+
+# Добавьте это для обслуживания HTML файла
+from fastapi.responses import HTMLResponse
+
+@app.get("/", response_class=HTMLResponse)
+async def serve_frontend():
+    with open("index.html", "r", encoding="utf-8") as f:
+        return f.read()
